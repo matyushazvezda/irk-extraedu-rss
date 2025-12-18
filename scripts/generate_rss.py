@@ -281,7 +281,18 @@ def parse_from_feed(feed_url: str, org_name: str, home_url: str) -> list[dict]:
     """
     try:
         resp = fetch(feed_url)
+        print(
+    f"[{org_name}] fetch feed url={feed_url} "
+    f"status={resp.status_code} final={resp.url} "
+    f"ctype={resp.headers.get('content-type','')} len={len(resp.content or b'')}"
+)
+
         if getattr(resp, "status_code", 0) >= 400:
+            print(
+    f"[{org_name}] fetch feed url={feed_url} "
+    f"status={resp.status_code} final={resp.url} "
+    f"ctype={resp.headers.get('content-type','')} len={len(resp.content or b'')}"
+)
             return []
 
         raw = resp.content or b""
@@ -289,6 +300,11 @@ def parse_from_feed(feed_url: str, org_name: str, home_url: str) -> list[dict]:
 
         # если вместо RSS пришла HTML-страница (заглушка/бан/редирект на HTML)
         if b"<html" in head or b"<!doctype html" in head:
+            print(
+    f"[{org_name}] fetch feed url={feed_url} "
+    f"status={resp.status_code} final={resp.url} "
+    f"ctype={resp.headers.get('content-type','')} len={len(resp.content or b'')}"
+)
             return []
 
         d = feedparser.parse(raw)
