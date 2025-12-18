@@ -1,7 +1,5 @@
 requests
-beautifulsoup4
-feedparser
-requests
+requests[socks]
 beautifulsoup4
 feedparser
 curl_cffi

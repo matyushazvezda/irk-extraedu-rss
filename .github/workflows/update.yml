@@ -3,7 +3,7 @@ name: Update extraedu RSS
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"  # раз в 6 часов (время UTC)
+    - cron: "0 */12 * * *"  # раз в 12 часов (время UTC)
 
 permissions:
   contents: write
@@ -18,10 +18,22 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install & start Tor
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tor
+          tor --RunAsDaemon 1 --SocksPort 9050
+          sleep 2
+
       - name: Install deps
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install -U pip
+          python -m pip install -r requirements.txt
+          python -m pip install "requests[socks]" curl_cffi cloudscraper
 
       - name: Generate RSS
+        env:
+          USE_TOR: "1"
         run: python scripts/generate_rss.py
 
       - name: Commit & push if changed
