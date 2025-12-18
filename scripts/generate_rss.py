@@ -288,6 +288,13 @@ def parse_from_feed(feed_url: str, org_name: str, home_url: str) -> list[dict]:
         if b"<html" in head or b"<!doctype html" in head:
             return []
         d = feedparser.parse(raw)
+        if getattr(d, "bozo", False):
+    print(f"[{org_name}] feed bozo=True url={feed_url} err={getattr(d, 'bozo_exception', None)}")
+    if getattr(d, "bozo", False):
+    print(f"[{org_name}] feed bozo=True url={feed_url} err={getattr(d, 'bozo_exception', None)}")
+print(f"[{org_name}] feed entries={len(getattr(d,'entries',[]) or [])} url={feed_url}")
+print(f"[{org_name}] feed entries={len(getattr(d,'entries',[]) or [])} url={feed_url}")
+
     except Exception:
         return []
 
@@ -487,6 +494,7 @@ def main():
 
         # ЛОГ (видно в GitHub Actions)
         print(f"[{src.name}] via={via} items={len(filtered)} home={home_url} news_page={news_page}")
+        print(f"[{src.name}] detected_feeds={len(uniq_fu)} -> {uniq_fu[:5]}")
 
         time.sleep(SLEEP_LIST)
 
