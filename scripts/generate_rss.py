@@ -143,7 +143,7 @@ def _req_curl_cffi(url: str, proxies=None):
         headers=HEADERS,
         timeout=TIMEOUT,
         allow_redirects=True,
-        impersonate="chrome120",
+        impersonate="chrome",
         proxies=proxies,
     )
 
@@ -155,14 +155,46 @@ def _req_cloudscraper(url: str, proxies=None):
     return s.get(url, headers=HEADERS, timeout=TIMEOUT, allow_redirects=True, proxies=proxies)
 
 
+def _looks_like_feed(resp) -> bool:
+    status = getattr(resp, "status_code", 0)
+    if status >= 400:
+        return False
+
+    ctype = ""
+    try:
+        ctype = (resp.headers.get("content-type") or "").lower()
+    except Exception:
+        pass
+
+    raw = _resp_content(resp) or b""
+    head = raw[:2000].lstrip().lower()
+
+    # 1) Быстрая проверка по Content-Type
+    if any(x in ctype for x in ("rss", "atom", "xml")):
+        # но всё равно отсекаем явный HTML
+        if b"<html" in head or b"<!doctype html" in head:
+            return False
+        return True
+
+    # 2) Если Content-Type "левый" — проверяем по содержимому
+    if head.startswith(b"<?xml") or b"<rss" in head or b"<feed" in head:
+        return True
+
+    return False
+
+
+def _looks_like_html(resp) -> bool:
+    raw = _resp_content(resp) or b""
+    head = raw[:400].lstrip().lower()
+    return b"<html" in head or b"<!doctype html" in head
+
+
 def fetch_url(url: str, *, org_name: str = "", kind: str = "page"):
     """
-    Пробует:
-      1) requests (direct)
-      2) curl_cffi (direct)
-      3) cloudscraper (direct)
-      4) если USE_TOR=1: requests (tor) -> curl_cffi (tor) -> cloudscraper (tor)
-    Возвращает response-подобный объект.
+    Порядок проб:
+      direct: requests -> curl_cffi -> cloudscraper
+      tor (если USE_TOR=1): curl_cffi -> cloudscraper -> requests
+    Для kind='feed' успехом считается только ответ, похожий на RSS/Atom/XML.
     """
     attempts = []
 
@@ -171,14 +203,16 @@ def fetch_url(url: str, *, org_name: str = "", kind: str = "page"):
     attempts.append(("curl_cffi", None))
     attempts.append(("cloudscraper", None))
 
-    # tor
+    # tor: начинаем с curl_cffi, т.к. у вас он уже показал лучший результат на home (200, большой HTML)
     if USE_TOR:
-        attempts.append(("requests", TOR_PROXIES))
         attempts.append(("curl_cffi", TOR_PROXIES))
         attempts.append(("cloudscraper", TOR_PROXIES))
+        attempts.append(("requests", TOR_PROXIES))
 
     last_exc = None
+
     for method, proxies in attempts:
+        proxy_tag = "tor" if proxies else "direct"
         try:
             if method == "requests":
                 resp = _req_requests(url, proxies=proxies)
@@ -195,21 +229,33 @@ def fetch_url(url: str, *, org_name: str = "", kind: str = "page"):
                 pass
 
             raw = _resp_content(resp) or b""
-            proxy_tag = "tor" if proxies else "direct"
             print(f"[{org_name}] fetch {kind} method={method}/{proxy_tag} url={url} status={status} ctype={ctype} len={len(raw)}")
 
-            # если не 403 — считаем успехом (даже 404/500 дальше обработает вызывающий код)
-            if status != 403:
-                return resp
+            # 403 — всегда пробуем дальше
+            if status == 403:
+                continue
+
+            # Для FEED: если пришёл HTML (даже 200) — это блок-страница, пробуем дальше
+            if kind == "feed":
+                if _looks_like_feed(resp):
+                    return resp
+                else:
+                    # полезно для диагностики: видим, что отдали "мягкий блок"
+                    if status < 400 and _looks_like_html(resp):
+                        print(f"[{org_name}] feed looks like HTML-block page (status={status}), trying next method...")
+                    continue
+
+            # Для HOME/PAGE/ARTICLE: любой не-403 ответ подходит
+            return resp
 
         except Exception as e:
             last_exc = e
-            proxy_tag = "tor" if proxies else "direct"
             print(f"[{org_name}] fetch {kind} ERROR method={method}/{proxy_tag} url={url} err={e}")
 
     if last_exc:
         raise last_exc
-    raise RuntimeError("fetch_url: all methods returned 403")
+    raise RuntimeError("fetch_url: all methods failed/blocked")
+
 
 
 # -------------------- SCRAPE LOGIC --------------------
