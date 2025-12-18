@@ -22,8 +22,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y tor
-          tor --RunAsDaemon 1 --SocksPort 9050
-          sleep 2
+          sudo systemctl restart tor
+          sudo systemctl --no-pager --full status tor || true
+          ss -lntp | grep ':9050' || (echo "Tor SOCKS 9050 not listening" && exit 1)
 
       - name: Install deps
         run: |
