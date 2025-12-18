@@ -22,10 +22,13 @@ OUT_XML = "docs/extra.xml"
 OUT_TITLE = "Новости учреждений доп. образования Иркутска"
 OUT_LINK = "https://eduirk.ru/"
 
+# Иркутск UTC+8 (для распознавания дат из текста)
 LOCAL_TZ = timezone(timedelta(hours=8))
 
+# Ключевые слова для авто-поиска страницы новостей
 NEWS_WORDS = ("новост", "событ", "объяв", "меропр", "пресс", "news", "event")
 
+# Частые RSS endpoints
 COMMON_FEEDS = (
     "feed/", "feed", "rss.xml", "rss", "rss/", "atom", "atom/",
     "?format=feed&type=rss", "?format=feed&type=atom",
@@ -58,6 +61,12 @@ def first_text(el) -> str:
     return el.get_text(" ", strip=True) if el else ""
 
 
+def strip_html(s: str) -> str:
+    if not s:
+        return ""
+    return BeautifulSoup(s, "html.parser").get_text(" ", strip=True)
+
+
 def rss_date_now() -> str:
     return datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
@@ -68,12 +77,6 @@ def to_rfc822(dt: datetime) -> str:
 
 def to_iso8601(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def strip_html(s: str) -> str:
-    if not s:
-        return ""
-    return BeautifulSoup(s, "html.parser").get_text(" ", strip=True)
 
 
 def norm_host_from_url(url: str) -> str:
@@ -94,18 +97,38 @@ def is_same_site(url: str, home_url: str) -> bool:
     return a == e or a.endswith("." + e)
 
 
+def pick_news_page(home_url: str, explicit_news_url: Optional[str]) -> str:
+    """Если news_url есть — используем его; иначе пытаемся найти ссылку на 'Новости' на главной (только в пределах домена)."""
+    if explicit_news_url:
+        return explicit_news_url
+
+    try:
+        resp = fetch(home_url)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for a in soup.find_all("a", href=True):
+            txt = (a.get_text(" ", strip=True) or "").lower()
+            href = (a.get("href") or "").strip()
+            if not href:
+                continue
+            cand = urljoin(home_url, href)
+            if not is_same_site(cand, home_url):
+                continue
+            if any(w in txt for w in NEWS_WORDS) or any(w in href.lower() for w in NEWS_WORDS):
+                return cand
+    except Exception:
+        pass
+
+    return home_url
+
+
 def detect_feed_urls(page_url: str, home_url: str) -> list[str]:
-    """
-    Ищем RSS/Atom через <link rel=alternate ...> + common endpoints.
-    Все найденные URL фильтруем: только тот же сайт (по home_url).
-    """
+    """Ищем RSS/Atom через <link rel=alternate ...>, плюс пробуем common endpoints. Фильтруем по домену home_url."""
     found = []
     seen = set()
 
     try:
         resp = fetch(page_url)
-        html = resp.text
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(resp.text, "html.parser")
         for link in soup.find_all("link", href=True):
             rel = " ".join(link.get("rel") or []).lower()
             typ = (link.get("type") or "").lower()
@@ -128,33 +151,6 @@ def detect_feed_urls(page_url: str, home_url: str) -> list[str]:
             continue
 
     return found
-
-
-def pick_news_page(home_url: str, explicit_news_url: Optional[str]) -> str:
-    """
-    Если news_url есть — используем его.
-    Иначе ищем ссылку на "Новости" на главной, НО только в пределах домена home_url.
-    """
-    if explicit_news_url:
-        return explicit_news_url
-
-    try:
-        resp = fetch(home_url)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        for a in soup.find_all("a", href=True):
-            txt = (a.get_text(" ", strip=True) or "").lower()
-            href = (a.get("href") or "").strip()
-            if not href:
-                continue
-            cand = urljoin(home_url, href)
-            if not is_same_site(cand, home_url):
-                continue
-            if any(w in txt for w in NEWS_WORDS) or any(w in href.lower() for w in NEWS_WORDS):
-                return cand
-    except Exception:
-        pass
-
-    return home_url
 
 
 def parse_date_from_text(text: str) -> Optional[datetime]:
@@ -185,22 +181,16 @@ def parse_date_from_text(text: str) -> Optional[datetime]:
 
 
 def parse_date_from_page(soup: BeautifulSoup, fallback_text: str) -> Optional[datetime]:
-    """
-    Пытаемся вытащить дату из:
-    - <time datetime="...">
-    - meta (article:published_time, datePublished, etc)
-    - затем эвристикой из текста
-    """
-    # <time datetime="2025-12-07T12:34:56+08:00">
+    # <time datetime="...">
     for t in soup.find_all("time"):
         dtv = (t.get("datetime") or "").strip()
         if dtv:
             try:
-                # fromisoformat понимает +08:00, но не всегда "Z" в старых версиях; у нас Python современный
                 return datetime.fromisoformat(dtv.replace("Z", "+00:00"))
             except Exception:
                 pass
 
+    # meta published
     meta_keys = [
         ("property", "article:published_time"),
         ("property", "article:modified_time"),
@@ -213,7 +203,7 @@ def parse_date_from_page(soup: BeautifulSoup, fallback_text: str) -> Optional[da
     for attr, val in meta_keys:
         m = soup.find("meta", attrs={attr: val})
         if m and m.get("content"):
-            c = m["content"].strip()
+            c = (m["content"] or "").strip()
             try:
                 return datetime.fromisoformat(c.replace("Z", "+00:00"))
             except Exception:
@@ -246,6 +236,7 @@ def parse_article(article_url: str, org_name: str, home_url: str) -> Optional[di
     h1_title = first_text(soup.find("h1")) or "Новость"
     title = f"[{org_name}] {h1_title}".strip()
 
+    # контейнер вокруг h1 (эвристика)
     h1 = soup.find("h1")
     container = h1
     for _ in range(10):
@@ -262,6 +253,7 @@ def parse_article(article_url: str, org_name: str, home_url: str) -> Optional[di
     clean_container(container)
     text = first_text(container)
 
+    # режем до заголовка
     pos = text.find(h1_title)
     if pos != -1:
         text = text[pos:]
@@ -269,7 +261,6 @@ def parse_article(article_url: str, org_name: str, home_url: str) -> Optional[di
         text = text[len(h1_title):].lstrip(" \t\r\n-–—:|")
 
     pub_dt = parse_date_from_page(soup, text)
-
     desc = text[:600] + ("…" if len(text) > 600 else "")
     if not desc:
         desc = h1_title or "Новость"
@@ -284,13 +275,31 @@ def parse_article(article_url: str, org_name: str, home_url: str) -> Optional[di
 
 def parse_from_feed(feed_url: str, org_name: str, home_url: str) -> list[dict]:
     """
-    Берём только элементы, у которых link на том же домене/поддомене, что home_url.
+    КЛЮЧЕВОЕ ИЗМЕНЕНИЕ:
+    1) Скачиваем RSS через requests (HEADERS)
+    2) feedparser.parse() получает байты (а не URL)
     """
-    d = feedparser.parse(feed_url)
-    items = []
+    try:
+        resp = fetch(feed_url)
+        if getattr(resp, "status_code", 0) >= 400:
+            return []
+        raw = resp.content or b""
+        head = raw[:400].lower()
+        if b"<html" in head or b"<!doctype html" in head:
+            return []
+        d = feedparser.parse(raw)
+    except Exception:
+        return []
 
-    for e in d.entries:
+    # base для относительных ссылок
+    base = (getattr(d, "feed", {}) or {}).get("link") or feed_url
+
+    items = []
+    for e in getattr(d, "entries", []) or []:
         link = (e.get("link") or "").strip()
+        if link:
+            link = urljoin(base, link)
+
         if not link or not is_same_site(link, home_url):
             continue
 
@@ -325,23 +334,22 @@ def parse_from_html(news_page_url: str, org_name: str, home_url: str) -> list[di
     resp = fetch(news_page_url)
     final_url = resp.url or news_page_url
     if not is_same_site(final_url, home_url):
-        # даже страница новостей внезапно уехала на внешний сайт (редирект)
         return []
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # Кандидаты ссылок, похожих на статьи: только внутри домена
     candidates = []
     for a in soup.find_all("a", href=True):
         href = (a.get("href") or "").strip()
         if not href:
             continue
         full = urljoin(final_url, href)
+
+        # только свой домен
         if not is_same_site(full, home_url):
             continue
 
         h = full.lower()
-        # базовая эвристика: ссылки на новости/посты/категории
         if any(w in h for w in NEWS_WORDS) or "article" in h or "post" in h or "/202" in h:
             candidates.append(full)
 
@@ -354,7 +362,7 @@ def parse_from_html(news_page_url: str, org_name: str, home_url: str) -> list[di
             uniq.append(u)
 
     items = []
-    for u in uniq[:PER_ORG * 5]:
+    for u in uniq[:PER_ORG * 6]:
         try:
             it = parse_article(u, org_name=org_name, home_url=home_url)
             time.sleep(SLEEP_ARTICLE)
@@ -407,10 +415,6 @@ def read_sources(path: str) -> list[Source]:
     """
     Формат строки:
       name | home_url | news_url(optional) | feed_url(optional)
-
-    Примеры:
-      МБОУ ... № 4|https://dush4.ru/||https://dush4.ru/feed/
-      ДЮЦ ...|http://илья-муромец.рус/|http://илья-муромец.рус/index.php?...|
     """
     out: list[Source] = []
     with open(path, "r", encoding="utf-8") as f:
@@ -439,13 +443,13 @@ def main():
         news_page = pick_news_page(home_url, src.news_url)
 
         got: list[dict] = []
+        via = "none"
 
-        # 1) Явный feed_url (если задан) — приоритет
+        # 1) Формируем список feed URLs (явный feed_url -> автодетект)
         feed_urls = []
         if src.feed_url:
             feed_urls.append(src.feed_url)
 
-        # 2) Автодетект фидов (на news_page и home)
         feed_urls.extend(detect_feed_urls(news_page, home_url))
         if home_url != news_page:
             feed_urls.extend(detect_feed_urls(home_url, home_url))
@@ -458,22 +462,20 @@ def main():
                 seen_fu.add(fu)
                 uniq_fu.append(fu)
 
+        # 2) пробуем фиды
         for fu in uniq_fu:
-            try:
-                got = parse_from_feed(fu, src.name, home_url)
-                if got:
-                    break
-            except Exception:
-                continue
+            got = parse_from_feed(fu, src.name, home_url)
+            if got:
+                via = "feed"
+                break
 
         # 3) HTML fallback
         if not got:
-            try:
-                got = parse_from_html(news_page, src.name, home_url)
-            except Exception:
-                got = []
+            got = parse_from_html(news_page, src.name, home_url)
+            if got:
+                via = "html"
 
-        # финальная фильтрация: только тот же сайт (страхуемся ещё раз)
+        # финальная фильтрация: только тот же сайт
         filtered = []
         for it in got:
             if it.get("link") and is_same_site(it["link"], home_url):
@@ -482,6 +484,10 @@ def main():
                 rejected_external += 1
 
         all_items.extend(filtered)
+
+        # ЛОГ (видно в GitHub Actions)
+        print(f"[{src.name}] via={via} items={len(filtered)} home={home_url} news_page={news_page}")
+
         time.sleep(SLEEP_LIST)
 
     # дедуп по ссылке
@@ -504,13 +510,11 @@ def main():
 
     dedup.sort(key=key_dt, reverse=True)
 
-    # пишем
     rss_bytes = make_rss(dedup[:TOTAL_LIMIT], OUT_TITLE, OUT_LINK)
 
     with open(OUT_XML, "wb") as f:
         f.write(rss_bytes)
 
-    # небольшой отчёт в логи GitHub Actions
     print(f"Sources: {len(sources)}")
     print(f"Items total: {len(all_items)}; unique: {len(dedup)}")
     print(f"Rejected external links: {rejected_external}")
