@@ -1,15 +1,15 @@
-МАОУ ДО г. Иркутска Дворец детского и юношеского творчества|https://ddut-irk.ru/|https://ddut-irk.ru/page/news-type-root
-МАОУ ДО г. Иркутска Спортивная школа «Дворец спорта «Юность»|https://dvorecunost.ru/|
-МБУ ДО г. Иркутска Дом детского творчества № 1|https://38ddt1.ru/|
-МБУ ДО г. Иркутска Дом детского творчества № 2|https://ddt2.do.am/|
-МБУ ДО г. Иркутска Дом детского творчества № 3|https://38ddt3.ru/|
-МБУ ДО г. Иркутска Дом детского творчества № 5|https://38ddt5.ru/|
-МБУ ДО г. Иркутска Центр детского творчества|https://38cdt.ru/|
-МБУ ДО г. Иркутска Центр детского технического творчества|https://38cdtt.ru/|
-МБОУ ДО г. Иркутска Спортивная школа № 3|https://irkdsport3.ru/|https://irkdsport3.ru/%d0%bd%d0%be%d0%b2%d0%be%d1%81%d1%82%d0%b8/
-МБОУ ДО г. Иркутска Спортивная школа № 4|https://dush4.ru/|
-МБОУ ДО г. Иркутска Спортивная школа № 5|https://irk-dyush5.ru/|
-МБОУ ДО г. Иркутска Спортивная школа № 6|https://38sport6.ru/|
-МБОУ ДО г. Иркутска Спортивная школа № 7|https://38sport7.ru/|
-МБУ ДО г. Иркутска Центр детского творчества "Восход"|https://38cdtv.ru/|
-МБУ ДО г. Иркутска Детско-юношеский центр "Илья Муромец"|http://илья-муромец.рус/|http://илья-муромец.рус/index.php?option=com_content&view=category&layout=blog&id=8&Itemid=109
+Дворец творчества|https://ddut-irk.ru/|https://ddut-irk.ru/page/news-type-root
+Дворец спорта «Юность»|https://dvorecunost.ru/|
+ДДТ № 1|https://38ddt1.ru/|
+ДДТ № 2|https://ddt2.do.am/|
+ДДТ № 3|https://38ddt3.ru/|
+ДДТ № 5|https://38ddt5.ru/|
+ЦДТ «Октябрьский»|https://38cdt.ru/|
+ЦДТТ|https://38cdtt.ru/|
+Спортивная школа № 3|https://irkdsport3.ru/|https://irkdsport3.ru/%d0%bd%d0%be%d0%b2%d0%be%d1%81%d1%82%d0%b8/
+Спортивная школа № 4|https://dush4.ru/|
+Спортивная школа № 5|https://irk-dyush5.ru/|
+Спортивная школа № 6|https://38sport6.ru/|
+Спортивная школа № 7|https://38sport7.ru/|
+ЦДТ «Восход»|https://38cdtv.ru/|
+ДЮЦ «Илья Муромец»|http://илья-муромец.рус/|http://илья-муромец.рус/index.php?option=com_content&view=category&layout=blog&id=8&Itemid=109
